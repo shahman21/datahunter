@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import { withX402, x402ResourceServer } from "@x402/next";
 import { ExactSvmScheme } from "@x402/svm/exact/server";
+import { readQuote } from "@/lib/agent/quote";
 import { provenanceOf } from "@/lib/agent/tools";
 import { findDataset, priceFor } from "@/lib/data/catalog";
 import { createSolanaRpc } from "@solana/kit";
@@ -15,11 +16,13 @@ import {
 } from "@/lib/payments/config";
 import type { DatasetListing, LicenceKind } from "@/lib/data/types";
 
-// GET /api/datasets/:id/download?licence=non-exclusive -> the rows, behind an x402 paywall.
+// GET /api/datasets/:id/download?licence=non-exclusive[&quote=...] -> the rows, behind an x402 paywall.
 //
 // This is the seller's half of the handshake. The price is the listing's price for the licence
 // asked for, so the paywall is derived from the catalogue rather than from one env var, and an
-// exclusive licence genuinely costs the seller's multiple.
+// exclusive licence genuinely costs the seller's multiple. A signed quote from a negotiation
+// (lib/agent/quote.ts) lowers it to the agreed price, never above list; a bad quote is refused
+// rather than silently charged at list.
 //
 // Two things are deliberate. The provenance check runs before the paywall, so a listing whose
 // signature does not hold is refused without a payment ever being demanded: a seller that
@@ -92,14 +95,13 @@ function readLicence(request: NextRequest): LicenceKind {
   return request.nextUrl.searchParams.get("licence") === "exclusive" ? "exclusive" : "non-exclusive";
 }
 
-/** The paywall is per dataset and per licence, so each price gets its own wrapped handler. */
+/** The paywall is per dataset, licence and price, so each price gets its own wrapped handler. */
 const wrapped = new Map<string, (request: NextRequest) => Promise<NextResponse>>();
 
-async function paywalled(dataset: DatasetListing, licenceKind: LicenceKind) {
-  const key = `${dataset.id}:${licenceKind}`;
+async function paywalled(dataset: DatasetListing, licenceKind: LicenceKind, priceUsdc: number) {
+  const key = `${dataset.id}:${licenceKind}:${priceUsdc}`;
   let handler = wrapped.get(key);
   if (!handler) {
-    const priceUsdc = priceFor(dataset, licenceKind);
     const payTo = await payToFor(dataset);
     handler = withX402(
       async () =>
@@ -151,8 +153,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
+  const licenceKind = readLicence(request);
+  const listPriceUsdc = priceFor(dataset, licenceKind);
+  const quoteParam = request.nextUrl.searchParams.get("quote");
+  let priceUsdc = listPriceUsdc;
+  if (quoteParam) {
+    const quote = readQuote(quoteParam);
+    if (!quote || quote.datasetId !== dataset.id || quote.licenceKind !== licenceKind || quote.priceUsdc > listPriceUsdc) {
+      return NextResponse.json({ error: "The negotiated price quote is invalid, expired, or not for this listing." }, { status: 400 });
+    }
+    priceUsdc = quote.priceUsdc;
+  }
+
   try {
-    const handler = await paywalled(dataset, readLicence(request));
+    const handler = await paywalled(dataset, licenceKind, priceUsdc);
     return await handler(request);
   } catch (err) {
     if (err instanceof PaymentsConfigError) return NextResponse.json({ error: err.message }, { status: 500 });

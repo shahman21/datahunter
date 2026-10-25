@@ -53,10 +53,12 @@ export interface DatasetPurchaseRequest {
   priceUsdc: number;
   /** What is left of the run's budget, as the x402 layer's own budget. */
   remainingUsdc: number;
+  /** Signed negotiated price (lib/agent/quote.ts), so the paywall asks for the deal price, not list. */
+  quote?: string;
 }
 
 export async function purchaseOverX402(req: DatasetPurchaseRequest): Promise<DatasetPurchase> {
-  const { datasetId, licenceKind, priceUsdc, remainingUsdc } = req;
+  const { datasetId, licenceKind, priceUsdc, remainingUsdc, quote } = req;
   const tracker = new SpendingTracker({
     budgetMicros: micros(Math.max(remainingUsdc, priceUsdc)),
     maxPaymentMicros: micros(priceUsdc),
@@ -64,7 +66,7 @@ export async function purchaseOverX402(req: DatasetPurchaseRequest): Promise<Dat
 
   const signer = await loadAgentSigner();
   const pay = createPayingFetch(attachSpendingLimits(createPaymentClient(signer), tracker));
-  const url = `${selfBaseUrl()}/api/datasets/${encodeURIComponent(datasetId)}/download?licence=${licenceKind}`;
+  const url = `${selfBaseUrl()}/api/datasets/${encodeURIComponent(datasetId)}/download?licence=${licenceKind}${quote ? `&quote=${encodeURIComponent(quote)}` : ""}`;
 
   const response = await pay(url, { headers: { accept: "application/json" } });
   const text = await response.text();

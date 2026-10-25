@@ -32,7 +32,12 @@ export type ToolName =
   | "get_sample"
   | "check_budget"
   | "purchase_dataset"
-  | "verify_provenance";
+  | "verify_provenance"
+  | "negotiate_price";
+
+/** Who said it in a negotiation, and what they did. Prices are decided in code, never by the model. */
+export type NegotiationParty = "buyer" | "seller";
+export type NegotiationAction = "offer" | "counter" | "accept" | "reject";
 
 export type AgentEvent =
   | { type: "thought"; text: string }
@@ -41,6 +46,21 @@ export type AgentEvent =
   | { type: "payment_required"; datasetId: string; priceUsdc: number; licenceKind: LicenceKind; network: "solana-devnet" }
   | { type: "payment_sent"; datasetId: string; signature: string; amountUsdc: number }
   | { type: "data_delivered"; datasetId: string; rows: number; licenceKind: LicenceKind }
+  | {
+      type: "offer";
+      datasetId: string;
+      licenceKind: LicenceKind;
+      from: NegotiationParty;
+      /** Display name: the buyer agent, or the seller from the listing. */
+      speaker: string;
+      action: NegotiationAction;
+      priceUsdc: number;
+      listPriceUsdc: number;
+      message: string;
+      /** The buyer's offer number, 1-based. */
+      round: number;
+    }
+  | { type: "deal"; datasetId: string; licenceKind: LicenceKind; seller: string; priceUsdc: number; listPriceUsdc: number }
   | { type: "blocked"; reason: string }
   | { type: "done"; summary: string };
 

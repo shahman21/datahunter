@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { AgentEvent } from "@/lib/data/types";
+import type { AgentEvent, NegotiationAction } from "@/lib/data/types";
 
 // Reads the newline-delimited AgentEvent stream from POST /api/agent and shows it as it
 // arrives. Nothing here invents an event: every row on screen came off the wire, and a
@@ -16,6 +16,8 @@ const LABELS: Record<AgentEvent["type"], string> = {
   payment_required: "Payment required",
   payment_sent: "Paid",
   data_delivered: "Delivered",
+  offer: "Offer",
+  deal: "Deal",
   blocked: "Refused",
   done: "Done",
 };
@@ -34,11 +36,52 @@ function eventBody(event: AgentEvent) {
       return `${event.amountUsdc} USDC for ${event.datasetId}`;
     case "data_delivered":
       return `${event.datasetId} · ${event.rows.toLocaleString("en-GB")} rows · ${event.licenceKind}`;
+    case "offer":
+      return event.message;
+    case "deal":
+      return `${event.priceUsdc} USDC with ${event.seller} for ${event.datasetId} · ${event.licenceKind} · list ${event.listPriceUsdc}${savedPercent(event.priceUsdc, event.listPriceUsdc)}`;
     case "blocked":
       return event.reason;
     case "done":
       return event.summary;
   }
+}
+
+const ACTION_LABELS: Record<NegotiationAction, string> = {
+  offer: "Offers",
+  counter: "Counters",
+  accept: "Accepts",
+  reject: "Holds",
+};
+
+function savedPercent(price: number, list: number): string {
+  const saved = Math.round((1 - price / list) * 100);
+  return saved > 0 ? ` · ${saved}% below list` : "";
+}
+
+/** The negotiate_price call and result are shown as the offer thread instead, so the raw rows are hidden. */
+function shownInFeed(event: AgentEvent): boolean {
+  return !((event.type === "tool_call" || event.type === "tool_result") && event.name === "negotiate_price");
+}
+
+function OfferBubble({ event }: { event: Extract<AgentEvent, { type: "offer" }> }) {
+  return (
+    <article className={`feed-row feed-row--offer feed-row--offer-${event.from}`}>
+      <div className={`bubble bubble--${event.from} bubble--${event.action}`}>
+        <span className="feed-label">
+          {event.speaker} · {ACTION_LABELS[event.action]} · round {event.round}
+        </span>
+        <p className="bubble-price">
+          <strong>{event.priceUsdc} USDC</strong>
+          {event.priceUsdc !== event.listPriceUsdc ? <s>{event.listPriceUsdc}</s> : null}
+          <span className="bubble-meta">
+            {event.datasetId} · {event.licenceKind}
+          </span>
+        </p>
+        <p className="feed-body">{event.message}</p>
+      </div>
+    </article>
+  );
 }
 
 export default function Console() {
@@ -168,17 +211,21 @@ export default function Console() {
           </div>
         ) : (
           <div className="feed" ref={feedRef} aria-live="polite">
-            {events.map((event, i) => (
-              <article className={`feed-row feed-row--${event.type}`} key={i}>
-                <span className="feed-label">{LABELS[event.type]}</span>
-                <p className="feed-body">{eventBody(event)}</p>
-                {event.type === "payment_sent" ? (
-                  <a className="feed-link" href={EXPLORER(event.signature)} target="_blank" rel="noreferrer">
-                    View on Solana devnet explorer ↗
-                  </a>
-                ) : null}
-              </article>
-            ))}
+            {events.map((event, i) =>
+              !shownInFeed(event) ? null : event.type === "offer" ? (
+                <OfferBubble event={event} key={i} />
+              ) : (
+                <article className={`feed-row feed-row--${event.type}`} key={i}>
+                  <span className="feed-label">{LABELS[event.type]}</span>
+                  <p className="feed-body">{eventBody(event)}</p>
+                  {event.type === "payment_sent" ? (
+                    <a className="feed-link" href={EXPLORER(event.signature)} target="_blank" rel="noreferrer">
+                      View on Solana devnet explorer ↗
+                    </a>
+                  ) : null}
+                </article>
+              ),
+            )}
             {running ? <p className="feed-waiting">Working…</p> : null}
           </div>
         )}

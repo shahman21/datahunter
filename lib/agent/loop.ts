@@ -1,11 +1,14 @@
 import "server-only";
 import { askClaude } from "../ai/claude";
 import type { AgentBrief, AgentEvent, LicenceKind, ToolName } from "../data/types";
+import { MAX_OFFERS } from "./negotiation";
 import {
   checkBudget,
   getSample,
+  negotiatePrice,
   newLedger,
   purchaseDataset,
+  purchaseVerdict,
   searchCatalog,
   TOOL_CATALOGUE,
   verifyProvenance,
@@ -16,7 +19,9 @@ import {
 // room can watch it think, get refused, and re-plan. Every refusal below comes from a server
 // side limit, never from the model deciding to behave.
 
-const MAX_STEPS = 12;
+// Negotiation adds two or three steps per purchase, so this is higher than a buy-at-list run needs.
+const MAX_STEPS = 18;
+const BUYER_NAME = "DataHunter buyer";
 
 type Step =
   | { tool: ToolName; args: Record<string, unknown>; status: string }
@@ -53,6 +58,7 @@ function systemBrief(brief: AgentBrief, ledger: RunLedger): string {
     "Tools:",
     ...TOOL_CATALOGUE.map((t) => `- ${t.name}: ${t.description} args ${t.args}`),
     "Work like a buyer who will have to defend the spend: sample before paying, verify provenance, and check the budget before committing.",
+    `Every purchase needs a price agreed with the seller's agent first: purchase_dataset is refused without one. Open with negotiate_price below the list price, with a one or two sentence message that justifies the offer from the brief and the free sample (freshness, row count, fields). The seller accepts, counters or holds. You have ${MAX_OFFERS} offers per dataset and licence, and offering the seller's current ask always accepts it. Once a price is agreed, purchase_dataset pays exactly that price.`,
     "Consider an exclusive licence only where the brief genuinely needs a competitor locked out, and accept a refusal rather than arguing with it.",
     "A refusal is not the end of the run. When a limit refuses a purchase, read what the refusal says is still allowed and take the best compliant option that serves the brief, rather than giving up. An exclusive licence you cannot afford does not rule out the same dataset non-exclusively.",
     "Stop only when the brief is covered, or when no option left is both compliant and useful. Say in the summary what you bought and what you deliberately did not.",
@@ -139,9 +145,49 @@ export async function* runAgent(brief: AgentBrief): AsyncGenerator<AgentEvent> {
         break;
       }
 
+      case "negotiate_price": {
+        const licenceKind = asLicenceKind(args.licenceKind);
+        const offerUsdc = typeof args.offerUsdc === "number" ? args.offerUsdc : Number(args.offerUsdc);
+        const buyerMessage = typeof args.message === "string" ? args.message.trim().slice(0, 400) : "";
+        const result = await negotiatePrice(ledger, datasetId, licenceKind, offerUsdc, buyerMessage);
+
+        if (!result.ok) {
+          transcript.push(`negotiate_price ${datasetId} ${licenceKind} ${offerUsdc} -> refused. ${result.reason}`);
+          yield { type: "tool_result", name: tool, summary: `refused. ${result.reason}` };
+          yield { type: "blocked", reason: result.reason };
+          break;
+        }
+
+        const { decision, listPriceUsdc, round } = result;
+        yield {
+          type: "offer", datasetId, licenceKind, from: "buyer", speaker: BUYER_NAME, action: "offer",
+          priceUsdc: result.offerUsdc, listPriceUsdc, round,
+          message: buyerMessage || `I can offer ${result.offerUsdc} USDC.`,
+        };
+        yield {
+          type: "offer", datasetId, licenceKind, from: "seller", speaker: result.seller, action: decision.action,
+          priceUsdc: decision.priceUsdc, listPriceUsdc, round, message: result.sellerMessage,
+        };
+        if (decision.action === "accept") {
+          yield { type: "deal", datasetId, licenceKind, seller: result.seller, priceUsdc: decision.priceUsdc, listPriceUsdc };
+        }
+
+        // What the buyer is told. The seller's floor is never in here, only its public ask.
+        const next =
+          decision.action === "accept"
+            ? `Price agreed at ${decision.priceUsdc} USDC. purchase_dataset will pay exactly that.`
+            : decision.action === "counter"
+              ? `Seller's ask is now ${decision.priceUsdc} USDC${decision.final ? ", best and final" : ""}. ${result.offersLeft} offers left; offering ${decision.priceUsdc} accepts it.`
+              : `Seller will not move from ${decision.priceUsdc} USDC. Offer ${decision.priceUsdc} to accept, or walk away.`;
+        const summary = `offered ${result.offerUsdc} (list ${listPriceUsdc}, round ${round}), seller ${decision.action === "accept" ? "accepted" : decision.action === "counter" ? "countered" : "held"}. ${next}`;
+        transcript.push(`negotiate_price ${datasetId} ${licenceKind} -> ${summary}`);
+        yield { type: "tool_result", name: tool, summary };
+        break;
+      }
+
       case "purchase_dataset": {
         const licenceKind = asLicenceKind(args.licenceKind);
-        const verdict = checkBudget(ledger, datasetId, licenceKind);
+        const verdict = purchaseVerdict(ledger, datasetId, licenceKind);
         if (!verdict.allowed) {
           transcript.push(`purchase_dataset ${datasetId} ${licenceKind} -> refused. ${verdict.reason}`);
           yield { type: "tool_result", name: tool, summary: `refused. ${verdict.reason}` };

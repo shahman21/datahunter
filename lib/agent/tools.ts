@@ -5,6 +5,9 @@ import { loadAgentSigner } from "../payments/client";
 import { signatureHolds } from "../provenance/verify";
 import { payUsdc } from "../payments/transfer";
 import { purchaseOverX402, type DatasetPurchase } from "../paidapi/dataset";
+import { applyDecision, MAX_OFFERS, openNegotiation, sellerDecide, type NegotiationState, type SellerDecision } from "./negotiation";
+import { signQuote } from "./quote";
+import { sellerMessage } from "./seller";
 
 // The product agent's tools. These run in process against the seeded catalogue; only
 // purchase_dataset touches the chain.
@@ -30,6 +33,8 @@ export interface RunLedger {
   /** Seller wallets the agent may pay. Empty means any seller that passes provenance. */
   allowedSellers: string[];
   purchased: { datasetId: string; licenceKind: LicenceKind; amountUsdc: number; signature: string }[];
+  /** Open negotiations, keyed by `${datasetId}:${licenceKind}`. Holds the seller's floor: never print it. */
+  negotiations: Record<string, NegotiationState>;
 }
 
 function envNumber(key: string, fallback: number): number {
@@ -50,6 +55,7 @@ export function newLedger(budgetUsdc: number): RunLedger {
     maxExclusiveUsdc: envNumber("MAX_EXCLUSIVE_USD", 0.05),
     allowedSellers: (process.env.ALLOWED_SELLERS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     purchased: [],
+    negotiations: {},
   };
 }
 
@@ -87,11 +93,16 @@ export interface BudgetVerdict {
   priceUsdc: number;
 }
 
-export function checkBudget(ledger: RunLedger, datasetId: string, licenceKind: LicenceKind): BudgetVerdict {
+/**
+ * Checks a price against the four limits. Without `priceUsdc` it checks the price agreed with the
+ * seller, or the list price if nothing is agreed yet. Offers go through this too, so the buyer can
+ * never offer more than it would be allowed to pay.
+ */
+export function checkBudget(ledger: RunLedger, datasetId: string, licenceKind: LicenceKind, priceUsdc?: number): BudgetVerdict {
   const dataset = findDataset(datasetId);
   if (!dataset) return { allowed: false, reason: `No dataset with id ${datasetId}.`, priceUsdc: 0 };
 
-  const priceUsdc = priceFor(dataset, licenceKind);
+  priceUsdc ??= agreedPrice(ledger, datasetId, licenceKind) ?? priceFor(dataset, licenceKind);
   const remaining = ledger.budgetUsdc - ledger.spentUsdc;
 
   if (licenceKind === "exclusive" && priceUsdc > ledger.maxExclusiveUsdc) {
@@ -115,6 +126,86 @@ export function checkBudget(ledger: RunLedger, datasetId: string, licenceKind: L
     return { allowed: false, priceUsdc, reason: `Provenance check failed. ${provenance.detail}` };
   }
   return { allowed: true, priceUsdc, reason: `Within all four limits. ${provenance.detail}` };
+}
+
+// ---------------------------------------------------------------------------
+// Negotiation: every purchase needs a price agreed with the seller's agent first
+// ---------------------------------------------------------------------------
+
+const negotiationKey = (datasetId: string, licenceKind: LicenceKind) => `${datasetId}:${licenceKind}`;
+
+export function agreedPrice(ledger: RunLedger, datasetId: string, licenceKind: LicenceKind): number | null {
+  return ledger.negotiations[negotiationKey(datasetId, licenceKind)]?.agreedUsdc ?? null;
+}
+
+/** The verdict a purchase is held to: an agreed price must exist, and that price must clear the limits. */
+export function purchaseVerdict(ledger: RunLedger, datasetId: string, licenceKind: LicenceKind): BudgetVerdict {
+  const dataset = findDataset(datasetId);
+  if (!dataset) return { allowed: false, reason: `No dataset with id ${datasetId}.`, priceUsdc: 0 };
+  const agreed = agreedPrice(ledger, datasetId, licenceKind);
+  if (agreed === null) {
+    return {
+      allowed: false,
+      priceUsdc: priceFor(dataset, licenceKind),
+      reason: `No price agreed with ${dataset.seller.name} for a ${licenceKind} licence yet. Negotiate with negotiate_price first.`,
+    };
+  }
+  return checkBudget(ledger, datasetId, licenceKind, agreed);
+}
+
+export type NegotiationResult =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      seller: string;
+      listPriceUsdc: number;
+      offerUsdc: number;
+      round: number;
+      offersLeft: number;
+      decision: SellerDecision;
+      sellerMessage: string;
+    };
+
+/**
+ * One round: the buyer's offer goes to the seller agent, which accepts, counters or holds.
+ * The offer is checked against the spending limits before it is sent, and the seller's price
+ * comes from negotiation.ts, so neither side's model can move the money.
+ */
+export async function negotiatePrice(
+  ledger: RunLedger,
+  datasetId: string,
+  licenceKind: LicenceKind,
+  offerUsdc: number,
+  buyerMessage: string,
+): Promise<NegotiationResult> {
+  const dataset = findDataset(datasetId);
+  if (!dataset) return { ok: false, reason: `No dataset with id ${datasetId}.` };
+  if (!Number.isFinite(offerUsdc) || offerUsdc <= 0) return { ok: false, reason: "An offer must be a positive USDC amount." };
+
+  const key = negotiationKey(datasetId, licenceKind);
+  const listPriceUsdc = priceFor(dataset, licenceKind);
+  const state = ledger.negotiations[key] ?? openNegotiation(datasetId, listPriceUsdc);
+  if (state.agreedUsdc !== null) {
+    return { ok: false, reason: `A ${licenceKind} price of ${state.agreedUsdc} USDC is already agreed for ${datasetId}. Buy it with purchase_dataset.` };
+  }
+
+  const verdict = checkBudget(ledger, datasetId, licenceKind, offerUsdc);
+  if (!verdict.allowed) return { ok: false, reason: `Offer not sent. ${verdict.reason}` };
+
+  const decision = sellerDecide(state, offerUsdc);
+  const next = applyDecision(state, decision);
+  ledger.negotiations[key] = next;
+
+  return {
+    ok: true,
+    seller: dataset.seller.name,
+    listPriceUsdc,
+    offerUsdc,
+    round: next.offers,
+    offersLeft: Math.max(0, MAX_OFFERS - next.offers),
+    decision,
+    sellerMessage: await sellerMessage(dataset, licenceKind, listPriceUsdc, decision, buyerMessage),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +298,7 @@ async function settleDirect(dataset: DatasetListing, licenceKind: LicenceKind, a
   const { signature } = await payUsdc(await loadAgentSigner(), {
     to: dataset.seller.wallet,
     amountUsdc,
-    memo: `datahunter:${dataset.id}:${licenceKind}`,
+    memo: `datahunter:${dataset.id}:${licenceKind}:${amountUsdc}`,
   });
   return { ok: true, amountUsdc, signature, rows: dataset.rows, paidTo: dataset.seller.wallet, paidToIsSeller: true };
 }
@@ -220,7 +311,7 @@ export async function purchaseDataset(ledger: RunLedger, datasetId: string, lice
   const dataset = findDataset(datasetId);
   if (!dataset) return { ok: false, datasetId, licenceKind, amountUsdc: 0, reason: `No dataset with id ${datasetId}.` };
 
-  const verdict = checkBudget(ledger, datasetId, licenceKind);
+  const verdict = purchaseVerdict(ledger, datasetId, licenceKind);
   if (!verdict.allowed) {
     return { ok: false, datasetId, licenceKind, amountUsdc: verdict.priceUsdc, reason: verdict.reason };
   }
@@ -234,6 +325,7 @@ export async function purchaseDataset(ledger: RunLedger, datasetId: string, lice
           licenceKind,
           priceUsdc: verdict.priceUsdc,
           remainingUsdc: ledger.budgetUsdc - ledger.spentUsdc,
+          quote: signQuote({ datasetId: dataset.id, licenceKind, priceUsdc: verdict.priceUsdc }),
         });
 
     if (!settled.ok || !settled.signature) {
@@ -272,5 +364,6 @@ export const TOOL_CATALOGUE: { name: ToolName; description: string; args: string
   { name: "get_sample", description: "Free preview of 20 redacted rows, with real field names, freshness and row count. Use it before paying.", args: '{ "datasetId": string }' },
   { name: "verify_provenance", description: "Check whether the seller's identity and signature hold up. Never buy a dataset this reports as unsigned.", args: '{ "datasetId": string }' },
   { name: "check_budget", description: "Ask the spending limits whether a purchase is permitted. Cheaper than being refused mid-payment.", args: '{ "datasetId": string, "licenceKind": "non-exclusive" | "exclusive" }' },
-  { name: "purchase_dataset", description: "Pay for a dataset in devnet USDC and receive the rows. An exclusive licence costs several times more and locks every other buyer out.", args: '{ "datasetId": string, "licenceKind": "non-exclusive" | "exclusive" }' },
+  { name: "negotiate_price", description: "Make the seller's agent an offer for a dataset and licence. It accepts, counters or holds. An accepted offer is binding and becomes the price purchase_dataset pays. Offers are checked against your spending limits before they are sent.", args: '{ "datasetId": string, "licenceKind": "non-exclusive" | "exclusive", "offerUsdc": number, "message": string }' },
+  { name: "purchase_dataset", description: "Pay the agreed price for a dataset in devnet USDC and receive the rows. Refused until a price is agreed with negotiate_price. An exclusive licence costs several times more and locks every other buyer out.", args: '{ "datasetId": string, "licenceKind": "non-exclusive" | "exclusive" }' },
 ];

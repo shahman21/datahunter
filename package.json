@@ -17,6 +17,7 @@
     "wallets": "tsx scripts/wallets.ts",
     "test:transfer": "tsx --test scripts/test-transfer.ts",
     "test:spending": "tsx --test scripts/test-spending.ts scripts/test-spending-x402.ts",
+    "test:negotiation": "tsx --conditions=react-server --test scripts/test-negotiation.ts",
     "pay": "tsx --conditions=react-server scripts/pay.ts",
     "agent:try": "node scripts/try-agent.mjs",
     "sign:catalog": "tsx --conditions=react-server scripts/sign-catalog.ts",
