@@ -54,7 +54,8 @@ function systemBrief(brief: AgentBrief, ledger: RunLedger): string {
     ...TOOL_CATALOGUE.map((t) => `- ${t.name}: ${t.description} args ${t.args}`),
     "Work like a buyer who will have to defend the spend: sample before paying, verify provenance, and check the budget before committing.",
     "Consider an exclusive licence only where the brief genuinely needs a competitor locked out, and accept a refusal rather than arguing with it.",
-    "Stop when the brief is covered or nothing affordable is left.",
+    "A refusal is not the end of the run. When a limit refuses a purchase, read what the refusal says is still allowed and take the best compliant option that serves the brief, rather than giving up. An exclusive licence you cannot afford does not rule out the same dataset non-exclusively.",
+    "Stop only when the brief is covered, or when no option left is both compliant and useful. Say in the summary what you bought and what you deliberately did not.",
   ].join("\n");
 }
 

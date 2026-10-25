@@ -231,3 +231,39 @@ textarea::placeholder { color: #788079; }
   .budget-field { width: 140px; }
   .dataset-row { align-items: flex-start; gap: 16px; }
 }
+
+/* ---------- Agent console feed ----------
+   Read from the back of a lecture hall: large type, high contrast, and the two
+   rows that carry the pitch (a refusal, a settled payment) coloured so they are
+   impossible to miss on a projector. */
+.run-error { margin: 12px 0 0; padding: 12px 14px; border: 1px solid #c2361f; border-radius: 6px; background: #fdedea; color: #93291a; font-size: 14px; line-height: 1.5; }
+.feed { margin-top: 16px; display: flex; flex-direction: column; max-height: 540px; overflow-y: auto; scroll-behavior: smooth; }
+.feed-row { padding: 16px 0 16px 16px; border-top: 1px solid var(--hairline); border-left: 3px solid transparent; }
+.feed-row:first-child { border-top: 0; }
+.feed-label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.feed-body { margin: 0; font-size: 17px; line-height: 1.55; color: var(--ink); overflow-wrap: anywhere; }
+.feed-link { display: inline-block; margin-top: 8px; font-size: 14px; font-weight: 550; color: var(--signal); }
+.feed-waiting { margin: 16px 0 0; padding-left: 16px; font-size: 14px; color: var(--muted); }
+
+.feed-row--thought .feed-body { color: var(--ink-2); }
+.feed-row--tool_call { border-left-color: #c8d2ca; }
+.feed-row--tool_call .feed-body,
+.feed-row--tool_result .feed-body { font-family: var(--mono); font-size: 14px; }
+.feed-row--tool_result { border-left-color: #c8d2ca; }
+
+.feed-row--payment_required { border-left-color: #d9a441; background: #fffaf0; }
+.feed-row--payment_required .feed-label { color: #8a5a00; }
+
+.feed-row--blocked { border-left-color: #c2361f; background: #fdedea; }
+.feed-row--blocked .feed-label { color: #93291a; }
+.feed-row--blocked .feed-body { font-size: 19px; font-weight: 550; color: #93291a; }
+
+.feed-row--payment_sent { border-left-color: var(--signal); background: #f1f7f3; }
+.feed-row--payment_sent .feed-label { color: var(--signal); }
+.feed-row--payment_sent .feed-body { font-weight: 550; }
+
+.feed-row--data_delivered { border-left-color: var(--signal); }
+.feed-row--data_delivered .feed-body { font-size: 19px; font-weight: 550; }
+
+.feed-row--done { border-left-color: var(--ink); background: #f6f8f6; }
+.feed-row--done .feed-body { font-size: 18px; font-weight: 550; }
