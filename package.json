@@ -19,7 +19,12 @@
     "test:spending": "tsx --test scripts/test-spending.ts scripts/test-spending-x402.ts",
     "pay": "tsx --conditions=react-server scripts/pay.ts",
     "agent:try": "node scripts/try-agent.mjs",
-    "sign:catalog": "tsx --conditions=react-server scripts/sign-catalog.ts"
+    "sign:catalog": "tsx --conditions=react-server scripts/sign-catalog.ts",
+    "challenge:idl": "tsx scripts/challenge-idl.ts",
+    "challenge:recon": "tsx scripts/challenge-recon.ts",
+    "challenge:check": "tsx scripts/challenge-check.ts",
+    "challenge:operation": "tsx scripts/challenge-operation.ts",
+    "challenge:minesweeper": "tsx scripts/challenge-minesweeper.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

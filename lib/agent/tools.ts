@@ -4,15 +4,16 @@ import type { DatasetListing, LicenceKind, ToolName } from "../data/types";
 import { loadAgentSigner } from "../payments/client";
 import { signatureHolds } from "../provenance/verify";
 import { payUsdc } from "../payments/transfer";
+import { purchaseOverX402, type DatasetPurchase } from "../paidapi/dataset";
 
 // The product agent's tools. These run in process against the seeded catalogue; only
 // purchase_dataset touches the chain.
 //
-// Luca's seam: purchase_dataset currently settles with a direct devnet USDC transfer to the
-// seller's wallet, carrying the dataset id as the memo. That is real money moving on a real
-// network, and it works today. The x402 upgrade is to route it through a 402-gated
-// /api/datasets/:id/download instead, so the seller's server is what demands payment and
-// releases the rows. Keep the signature and the ledger behaviour identical when you swap it.
+// purchase_dataset settles over x402 against our own 402-gated /api/datasets/:id/download, so
+// the seller's server is what demands payment and releases the rows, and the facilitator pays
+// the network fee. DATAHUNTER_SETTLEMENT=direct switches to a direct devnet USDC transfer to
+// the seller's wallet instead, which is the same money on the same network but needs devnet SOL
+// in our wallet for the fee. Both rails return a real signature or an honest failure.
 
 // ---------------------------------------------------------------------------
 // The four limits, enforced here and never by the model
@@ -187,6 +188,28 @@ export interface PurchaseResult {
   explorerUrl?: string;
   rows?: number;
   reason?: string;
+  /** Which rail settled this, so the console can say so rather than implying one. */
+  rail?: SettlementRail;
+  /** The address the money landed in, and whether that is the seller's own wallet. */
+  paidTo?: string;
+  paidToIsSeller?: boolean;
+}
+
+export type SettlementRail = "x402" | "direct";
+
+/** x402 unless told otherwise, because it settles without devnet SOL in our wallet. */
+export function settlementRail(): SettlementRail {
+  return process.env.DATAHUNTER_SETTLEMENT?.trim() === "direct" ? "direct" : "x402";
+}
+
+/** The direct rail: we sign the transfer ourselves and pay the network fee, so it needs SOL. */
+async function settleDirect(dataset: DatasetListing, licenceKind: LicenceKind, amountUsdc: number): Promise<DatasetPurchase> {
+  const { signature } = await payUsdc(await loadAgentSigner(), {
+    to: dataset.seller.wallet,
+    amountUsdc,
+    memo: `datahunter:${dataset.id}:${licenceKind}`,
+  });
+  return { ok: true, amountUsdc, signature, rows: dataset.rows, paidTo: dataset.seller.wallet, paidToIsSeller: true };
 }
 
 /**
@@ -202,22 +225,34 @@ export async function purchaseDataset(ledger: RunLedger, datasetId: string, lice
     return { ok: false, datasetId, licenceKind, amountUsdc: verdict.priceUsdc, reason: verdict.reason };
   }
 
+  const rail = settlementRail();
   try {
-    const { signature } = await payUsdc(await loadAgentSigner(), {
-      to: dataset.seller.wallet,
-      amountUsdc: verdict.priceUsdc,
-      memo: `datahunter:${dataset.id}:${licenceKind}`,
-    });
+    const settled = rail === "direct"
+      ? await settleDirect(dataset, licenceKind, verdict.priceUsdc)
+      : await purchaseOverX402({
+          datasetId: dataset.id,
+          licenceKind,
+          priceUsdc: verdict.priceUsdc,
+          remainingUsdc: ledger.budgetUsdc - ledger.spentUsdc,
+        });
+
+    if (!settled.ok || !settled.signature) {
+      return { ok: false, datasetId: dataset.id, licenceKind, amountUsdc: verdict.priceUsdc, rail, reason: settled.reason ?? "Payment did not settle." };
+    }
+
     ledger.spentUsdc += verdict.priceUsdc;
-    ledger.purchased.push({ datasetId: dataset.id, licenceKind, amountUsdc: verdict.priceUsdc, signature });
+    ledger.purchased.push({ datasetId: dataset.id, licenceKind, amountUsdc: verdict.priceUsdc, signature: settled.signature });
     return {
       ok: true,
       datasetId: dataset.id,
       licenceKind,
       amountUsdc: verdict.priceUsdc,
-      signature,
-      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
-      rows: dataset.rows,
+      signature: settled.signature,
+      explorerUrl: `https://explorer.solana.com/tx/${settled.signature}?cluster=devnet`,
+      rows: settled.rows ?? dataset.rows,
+      rail,
+      paidTo: settled.paidTo,
+      paidToIsSeller: settled.paidToIsSeller,
     };
   } catch (err) {
     return {
@@ -225,6 +260,7 @@ export async function purchaseDataset(ledger: RunLedger, datasetId: string, lice
       datasetId: dataset.id,
       licenceKind,
       amountUsdc: verdict.priceUsdc,
+      rail,
       reason: `Settlement failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }

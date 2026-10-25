@@ -162,7 +162,10 @@ export async function* runAgent(brief: AgentBrief): AsyncGenerator<AgentEvent> {
         yield { type: "payment_sent", datasetId, signature: result.signature, amountUsdc: result.amountUsdc };
         yield { type: "data_delivered", datasetId, rows: result.rows ?? 0, licenceKind };
         transcript.push(`purchase_dataset ${datasetId} ${licenceKind} -> settled ${result.amountUsdc} USDC, signature ${result.signature}, ${result.rows} rows delivered`);
-        yield { type: "tool_result", name: tool, summary: `settled ${result.amountUsdc} USDC. ${result.rows} rows delivered. ${result.explorerUrl}` };
+        const payee = result.paidToIsSeller === false
+          ? ` Paid into the marketplace settlement account ${result.paidTo?.slice(0, 8)}… on the seller's behalf, not the seller's own wallet.`
+          : "";
+        yield { type: "tool_result", name: tool, summary: `settled ${result.amountUsdc} USDC over ${result.rail === "direct" ? "a direct devnet transfer" : "x402"}. ${result.rows} rows delivered.${payee} ${result.explorerUrl}` };
         break;
       }
     }
