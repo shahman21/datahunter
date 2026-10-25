@@ -1,0 +1,101 @@
+--- a/lib/agent/tools.ts
++++ b/lib/agent/tools.ts
+@@ -1,4 +1,5 @@
+ import "server-only";
++import { assessListing, trustRefusal } from "@/components/trust/registry";
+ import { CATALOG, findDataset, priceFor } from "../data/catalog";
+ import type { DatasetListing, LicenceKind, ToolName } from "../data/types";
+ import { loadAgentSigner } from "../payments/client";
+@@ -125,6 +126,9 @@
+   if (provenance.status !== "verified") {
+     return { allowed: false, priceUsdc, reason: `Provenance check failed. ${provenance.detail}` };
+   }
++  const assessment = assessListing(dataset, provenance.status);
++  const refusal = trustRefusal(assessment);
++  if (refusal) return { allowed: false, priceUsdc, reason: refusal };
+   return { allowed: true, priceUsdc, reason: `Within all four limits. ${provenance.detail}` };
+ }
+ 
+@@ -249,6 +253,9 @@
+ export function getSample(datasetId: string) {
+   const dataset = findDataset(datasetId);
+   if (!dataset) return { error: `No dataset with id ${datasetId}.` };
++  const assessment = assessListing(dataset, provenanceOf(dataset).status);
++  const refusal = trustRefusal(assessment);
++  if (refusal) return { error: refusal, assessment };
+   const rows = Array.from({ length: 20 }, (_, i) =>
+     Object.fromEntries(dataset.sampleFields.map((f) => [f, `${f}:redacted:${i + 1}`])),
+   );
+@@ -267,7 +274,8 @@
+   const dataset = findDataset(datasetId);
+   if (!dataset) return { error: `No dataset with id ${datasetId}.` };
+   const { status, detail } = provenanceOf(dataset);
+-  return { datasetId: dataset.id, seller: dataset.seller.name, status, detail, safeToBuy: status !== "unsigned" };
++  const assessment = assessListing(dataset, status);
++  return { datasetId: dataset.id, seller: dataset.seller.name, status, detail, assessment, safeToBuy: assessment.automaticPurchaseAllowed };
+ }
+ 
+ export interface PurchaseResult {
+--- a/app/api/datasets/[id]/download/route.ts
++++ b/app/api/datasets/[id]/download/route.ts
+@@ -1,3 +1,4 @@
++import { assessListing, trustRefusal } from "@/components/trust/registry";
+ import { NextResponse, type NextRequest } from "next/server";
+ import { HTTPFacilitatorClient } from "@x402/core/server";
+ import { withX402, x402ResourceServer } from "@x402/next";
+@@ -165,6 +166,10 @@
+     priceUsdc = quote.priceUsdc;
+   }
+ 
++  const assessment = assessListing(dataset, provenance.status);
++  const refusal = trustRefusal(assessment);
++  if (refusal) return NextResponse.json({ error: refusal, assessment }, { status: 403 });
++
+   try {
+     const handler = await paywalled(dataset, licenceKind, priceUsdc);
+     return await handler(request);
+--- a/app/api/datasets/[id]/sample/route.ts
++++ b/app/api/datasets/[id]/sample/route.ts
+@@ -8,6 +8,6 @@
+ export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+   const { id } = await params;
+   const sample = getSample(id);
+-  if ("error" in sample) return Response.json(sample, { status: 404 });
++  if ("error" in sample) return Response.json(sample, { status: "assessment" in sample ? 403 : 404 });
+   return Response.json(sample, { headers: { "cache-control": "no-store" } });
+ }
+--- a/app/api/datasets/route.ts
++++ b/app/api/datasets/route.ts
+@@ -1,3 +1,4 @@
++import { assessListing } from "@/components/trust/registry";
+ import { CATALOG } from "@/lib/data/catalog";
+ import { provenanceOf } from "@/lib/agent/tools";
+ 
+@@ -10,7 +11,7 @@
+ 
+ export async function GET() {
+   return Response.json(
+-    CATALOG.map((dataset) => ({ ...dataset, provenanceStatus: provenanceOf(dataset).status })),
++    CATALOG.map((dataset) => ({ ...dataset, provenanceStatus: provenanceOf(dataset).status, trustAssessment: assessListing(dataset, provenanceOf(dataset).status) })),
+     { headers: { "cache-control": "no-store" } },
+   );
+ }
+--- a/lib/agent/loop.ts
++++ b/lib/agent/loop.ts
+@@ -54,7 +54,7 @@
+     `- no single payment above ${ledger.maxPaymentUsdc} USDC`,
+     `- no exclusive licence above ${ledger.maxExclusiveUsdc} USDC`,
+     `- never buy a dataset whose provenance is unsigned`,
+-    "Provenance has three states and they are not the same thing. `unsigned` means the listing claims no seller identity at all: never buy it, whatever the price. `pending` means the seller is named but has not issued a signature yet: you may buy it where the brief needs it, and you must say so in your summary. `verified` means a signature was checked and holds.",
++    "Only datasets with verified listing signatures and a passing procurement-policy assessment may be sampled or purchased. The pilot permits non-personal data only, reviewed training rights and seller identity, and documented UK hosting, processing and access. Missing evidence requires review. Do not override any refusal. A signature does not establish legal rights.",
+     "Tools:",
+     ...TOOL_CATALOGUE.map((t) => `- ${t.name}: ${t.description} args ${t.args}`),
+     "Work like a buyer who will have to defend the spend: sample before paying, verify provenance, and check the budget before committing.",
+@@ -124,6 +124,7 @@
+           : `${sample.rowsShown} of ${sample.totalRows} rows, fields ${sample.fields.join(", ")}, newest row ${sample.freshness}`;
+         transcript.push(`get_sample ${datasetId} -> ${summary}`);
+         yield { type: "tool_result", name: tool, summary };
++        if ("error" in sample) yield { type: "blocked", reason: String(sample.error) };
+         break;
+       }
+ 

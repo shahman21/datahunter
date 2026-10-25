@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "./ThemeToggle";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,6 +17,7 @@ export function Nav({ links }: { links: { href: string; label: string }[] }) {
           </Link>
         );
       })}
+      {pathname === "/market" && <ThemeToggle />}
     </nav>
   );
 }

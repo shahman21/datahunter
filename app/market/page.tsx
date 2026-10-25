@@ -1,3 +1,6 @@
+import { TrustAssessment } from "@/components/trust/TrustAssessment";
+import { assessListing } from "@/components/trust/registry";
+import { PILOT_POLICY } from "@/components/trust/policy";
 import { provenanceOf } from "@/lib/agent/tools";
 import { CATALOG } from "@/lib/data/catalog";
 import type { DatasetListing } from "@/lib/data/types";
@@ -11,7 +14,7 @@ import type { DatasetListing } from "@/lib/data/types";
 function provenance(dataset: DatasetListing): { label: string; tone: "ok" | "pending" | "fault" } {
   switch (provenanceOf(dataset).status) {
     case "verified":
-      return { label: "Provenance verified", tone: "ok" };
+      return { label: "Signature verified", tone: "ok" };
     case "pending":
       return { label: "Signature pending", tone: "pending" };
     case "tampered":
@@ -33,11 +36,12 @@ function freshness(iso: string): string {
 
 export default function MarketPage() {
   return (
-    <div className="workspace">
+    <div className="workspace catalogue-workspace">
       <header className="workspace-heading">
-        <h1>Dataset catalogue.</h1>
-        <p>A starting point for your agent’s search. Seeded sellers, real settlement rail.</p>
+        <h1>Dataset catalogue</h1>
+        <p>Compare pricing, licences and provenance before starting a data hunt.</p>
       </header>
+      <div className="catalogue-policy"><strong>Automatic procurement policy</strong><p>{PILOT_POLICY.description}</p><p>Signed listings still require evidence of identity, usage rights and data classification.</p></div>
       <section className="catalogue" aria-label="Available datasets">
         <div className="catalogue-heading">
           <span>{CATALOG.length} datasets · Seeded catalogue</span>
@@ -45,6 +49,7 @@ export default function MarketPage() {
         </div>
         {CATALOG.map((dataset) => {
           const prov = provenance(dataset);
+          const assessment = assessListing(dataset, provenanceOf(dataset).status);
           return (
             <article className="dataset-row" key={dataset.id}>
               <div className="dataset-main">
@@ -52,19 +57,19 @@ export default function MarketPage() {
                 <p>
                   {dataset.seller.name} <span aria-hidden="true">·</span>{" "}
                   {dataset.rows.toLocaleString("en-GB")} rows <span aria-hidden="true">·</span>{" "}
-                  {freshness(dataset.freshness)}
+                  <time dateTime={dataset.freshness}>{new Date(dataset.freshness).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</time> · {freshness(dataset.freshness)}
                 </p>
                 <p className="dataset-terms">{dataset.licence.terms}</p>
                 <div className="dataset-flags">
                   <span className={`flag flag--${prov.tone}`}>{prov.label}</span>
-                  <span className="flag">
-                    Exclusive {dataset.licence.exclusivePriceUsdc.toFixed(2)} USDC
-                  </span>
+                  {Date.now() - new Date(dataset.freshness).getTime() > 365 * DAY && <span className="flag flag--pending">Older than one year</span>}
                 </div>
+                <TrustAssessment assessment={assessment} />
               </div>
-              <span className="dataset-price">
-                {dataset.priceUsdc.toFixed(2)} <span>USDC</span>
-              </span>
+              <dl className="dataset-prices">
+                <div><dt>Non-exclusive</dt><dd>{dataset.priceUsdc.toFixed(2)} <span>USDC</span></dd></div>
+                <div><dt>Exclusive</dt><dd>{dataset.licence.exclusivePriceUsdc.toFixed(2)} <span>USDC</span></dd></div>
+              </dl>
             </article>
           );
         })}
