@@ -158,3 +158,76 @@ textarea:focus, input:focus { border-color: var(--signal); box-shadow: inset 0 0
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Minimal working skeleton. Shared starter classes above remain for the utility pages. */
+:root {
+  --canvas: #fafbf9;
+  --ink: #202822;
+  --ink-2: #465048;
+  --muted: #68716a;
+  --hairline: #e4e8e3;
+  --signal: #356345;
+  --signal-ink: #356345;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: ui-monospace, monospace;
+}
+body { background-image: none; }
+.header { position: static; background: #fff; color: var(--ink); border-bottom: 1px solid var(--hairline); }
+.header-inner { min-height: 80px; max-width: 1120px; justify-content: space-between; }
+.wordmark { align-items: center; gap: 10px; color: var(--ink); }
+.wordmark:hover { color: var(--ink); }
+.wordmark b { font-size: 17px; font-weight: 650; letter-spacing: -0.6px; }
+.wordmark .brand-mark { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 7px; background: var(--signal); color: #fff; font: 600 23px/1 var(--sans); }
+.nav { gap: 24px; }
+.nav a { padding: 0; font-size: 13px; font-weight: 500; color: var(--muted); border-radius: 0; }
+.nav a:hover, .nav a[aria-current="page"] { color: var(--ink); background: transparent; }
+.nav a[aria-current="page"] { box-shadow: 0 2px 0 var(--signal); }
+.page { max-width: 1120px; padding-top: 64px; padding-bottom: 80px; }
+.workspace { width: 100%; max-width: 760px; margin: 0 auto; }
+.workspace-heading { margin-bottom: 32px; }
+.workspace-heading h1 { margin: 0 0 12px; font-size: clamp(28px, 4vw, 36px); font-weight: 550; letter-spacing: -1.2px; line-height: 1.2; }
+.workspace-heading p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.brief-panel { padding: 24px; background: #fff; border: 1px solid var(--hairline); border-radius: 10px; }
+.brief-panel label { display: block; font-size: 13px; font-weight: 550; margin-bottom: 12px; }
+textarea, input { font-family: var(--sans); font-size: 15px; font-weight: 400; border: 1px solid var(--hairline); border-radius: 6px; background: #fff; }
+.brief-panel textarea { display: block; padding: 0; border: 0; border-radius: 0; min-height: 140px; line-height: 1.7; }
+.brief-panel textarea:focus { box-shadow: none; }
+.brief-panel textarea:focus-visible { outline: 2px solid var(--signal); outline-offset: 5px; }
+textarea::placeholder { color: #788079; }
+.brief-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-top: 20px; border-top: 1px solid var(--hairline); }
+.budget-field { width: 162px; }
+.budget-field label { color: var(--muted); margin-bottom: 8px; font-size: 12px; }
+.budget-input { display: flex; align-items: center; gap: 8px; border: 1px solid var(--hairline); border-radius: 6px; padding-right: 12px; }
+.budget-input input { width: 100%; min-width: 0; padding: 10px 12px; border: 0; background: transparent; font-variant-numeric: tabular-nums; }
+.budget-input span { color: var(--muted); font-size: 11px; }
+.btn { height: 42px; padding: 0 18px; border-radius: 6px; font-size: 13px; font-weight: 550; text-transform: none; letter-spacing: 0; box-shadow: none; }
+.btn--primary { background: var(--signal); }
+.btn--secondary { border-color: var(--hairline); }
+.brief-panel .btn:disabled { background: #e6ede7; color: #617766; }
+.preview-note { margin: 10px 0 40px; color: var(--muted); font-size: 12px; }
+.activity-heading { display: flex; align-items: center; justify-content: space-between; }
+.activity-heading h2 { margin: 0; font-size: 14px; font-weight: 550; }
+.activity-heading > span { font-size: 12px; color: var(--muted); }
+.activity-empty { min-height: 174px; margin-top: 16px; border: 1px dashed #dbe1da; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--muted); text-align: center; padding: 20px; }
+.activity-empty p { margin: 0; font-size: 13px; line-height: 1.6; }
+.activity-symbol { font-size: 24px; color: #8a978d; }
+.catalogue-heading { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; color: var(--muted); font-size: 12px; }
+.dataset-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 0; border-top: 1px solid var(--hairline); }
+.dataset-row h2 { margin: 0 0 8px; font-size: 14px; font-weight: 550; line-height: 1.5; }
+.dataset-row p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.dataset-price { flex-shrink: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.dataset-price span { font-size: 10px; color: var(--muted); }
+.footer { background: transparent; color: var(--muted); font: 400 11px var(--sans); }
+.footer-inner { max-width: 1120px; padding-top: 20px; padding-bottom: 24px; border-top: 1px solid var(--hairline); }
+.display { font-size: 36px; font-weight: 550; line-height: 1.2; }
+.module { border-color: var(--hairline); border-radius: 8px; }
+.module-strip { background: #fff; border-color: var(--hairline); }
+@media (max-width: 540px) {
+  .header-inner { min-height: 68px; }
+  .nav { gap: 16px; }
+  .page { padding-top: 36px; }
+  .brief-panel { padding: 18px; }
+  .brief-controls { gap: 12px; }
+  .budget-field { width: 140px; }
+  .dataset-row { align-items: flex-start; gap: 16px; }
+}
