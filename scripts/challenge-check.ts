@@ -37,11 +37,14 @@ const pdas = await challengePdas(challengeId);
 console.log(`challenge id ${challengeId}`);
 console.log(`team wallet  ${TEAM_WALLET}\n`);
 
+// The organisers create claim and holdings. The deed is ours to create: mint_code writes it,
+// so "does not exist" there means Minesweeper has not been started, not that we are blocked.
 let provisioned = true;
 for (const [label, pda] of Object.entries(pdas)) {
   const data = await accountData(pda);
-  console.log(`${label.padEnd(9)} ${pda} ${data ? `${data.length} bytes` : "DOES NOT EXIST"}`);
-  if (!data) provisioned = false;
+  const absent = label === "deed" ? "not minted yet (expected until challenge:minesweeper runs)" : "DOES NOT EXIST";
+  console.log(`${label.padEnd(9)} ${pda} ${data ? `${data.length} bytes` : absent}`);
+  if (!data && label !== "deed") provisioned = false;
   if (data && label === "claim" && data.length >= 81) {
     console.log(`          clearance nonce   ${data.readBigUInt64LE(41)}`);
     console.log(`          clearance account ${addresses.decode(data.subarray(49, 81))}`);
@@ -62,4 +65,7 @@ try {
 }
 console.log(`\nCRED account ${credAccount}`);
 console.log(`CRED balance ${cred}`);
-console.log(`\n${provisioned && !cred.startsWith("no") ? "READY: records exist and CRED is funded." : "NOT READY: ask an organiser to provision the team."}`);
+const funded = !cred.startsWith("no") && cred !== "0 base units";
+console.log(
+  `\n${provisioned && funded ? "READY: claim and holdings exist and CRED is funded." : "NOT READY: ask an organiser to provision the team."}`,
+);
