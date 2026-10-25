@@ -1,6 +1,6 @@
 # Governing agents that buy data
 
-A governance annex to Moat, an agent-to-agent data marketplace built for the Oxford and
+A governance annex to DataHunter, an agent-to-agent data marketplace built for the Oxford and
 Cambridge AI Race, 25 October 2026.
 
 ## What needs governing

@@ -1,4 +1,4 @@
-# Moat
+# DataHunter
 
 An agent-to-agent data marketplace. Buyer agents acting for a company go out, find the
 datasets that company needs, check the licence and the provenance, pay for them per
@@ -64,7 +64,7 @@ it. The URL must be public `https://`, final with no redirects, no private or lo
 addresses. Vercel satisfies this.
 
 ```
-GET  /agent-studio/v1/health   200 { "protocol": "asrp/1", "status": "ready", "name": "moat" }
+GET  /agent-studio/v1/health   200 { "protocol": "asrp/1", "status": "ready", "name": "datahunter" }
 POST /agent-studio/v1/tasks    the envelope below
 ```
 
@@ -272,7 +272,7 @@ done rather than waiting for it to be tidy.
 | 15:00 | `use_tools` branch calling the platform tool service for real, run the check, 300 points | Aditya |
 | 15:45 | `run_workflow` transferring devnet USDC with the memo, run the check, 400 points | Luca |
 | 16:00 | Final submission, run the check, 200 points. Scoreboard done at 1300 | Aditya |
-| 14:00 to 17:30 | Moat itself, in parallel and independent of all of the above | Zachary and Luca |
+| 14:00 to 17:30 | DataHunter itself, in parallel and independent of all of the above | Zachary and Luca |
 | 17:30 | Interface good enough to project on a wall, recorded fallback run saved | Zachary |
 | 18:00 | Pitch rehearsed out loud twice, on the real deployed app | All three |
 
