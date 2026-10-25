@@ -192,7 +192,7 @@ type PaymentRequest = { to: string; amountUsdc: number; memo?: string };
  * Read the address, amount and memo straight out of it. The address is matched by pattern
  * rather than asked of the model, because a hallucinated recipient is an unrecoverable mistake.
  */
-async function extractPayment(task: Task, instruction: string): Promise<PaymentRequest | null> {
+async function extractPayment(task: Task, instruction: string, request?: TaskRequest): Promise<PaymentRequest | null> {
   const obj = (typeof task.input === "object" && task.input ? task.input : {}) as Record<string, unknown>;
   const str = (...keys: string[]) => keys.map((k) => obj[k]).find((v): v is string => typeof v === "string" && v.length > 0);
   const num = (...keys: string[]) => keys.map((k) => obj[k]).find((v): v is number => typeof v === "number");
@@ -235,6 +235,12 @@ async function extractPayment(task: Task, instruction: string): Promise<PaymentR
     if (!to && typeof parsed?.to === "string") to = parsed.to;
     if (amountUsdc === undefined && typeof parsed?.amountUsdc === "number") amountUsdc = parsed.amountUsdc;
     if (memo === undefined && typeof parsed?.memo === "string" && parsed.memo) memo = parsed.memo;
+  }
+
+  // The platform's capability lab says the payment layer uses the attempt nonce as the memo.
+  // Prefer a memo stated in the instruction; fall back to the nonce, then the attempt id.
+  if (memo === undefined) {
+    memo = request?.nonce ?? request?.attempt?.id;
   }
 
   if (!to || amountUsdc === undefined) {
@@ -290,10 +296,10 @@ export const handlers: Record<TaskType, Handler> = {
   // Deliberately no SpendGuard on this path. The spending limits belong to the product's own
   // x402 purchases, where an agent decides how much to spend; here the verifier dictates the
   // amount, so a guard could only ever block points we are trying to win.
-  run_workflow: async (task) => {
+  run_workflow: async (task, request) => {
     const instruction = requireInput(task);
 
-    const payment = await extractPayment(task, instruction);
+    const payment = await extractPayment(task, instruction, request);
     if (payment) {
       const { signature } = await payUsdc(await loadAgentSigner(), payment);
       return {
