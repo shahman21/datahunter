@@ -127,7 +127,12 @@ the builder turns them on for you.
   own /chat demo page and needs no key for the race.
 - x402 V2 2.28.0 on Solana devnet, `@x402/express` 2.28.0 if a separate service appears
 - Payments are USDC on Solana devnet only, atomic amounts, scheme `exact`
-- Deploy to Vercel via `npx vercel` because the CLI is not installed globally
+- Deployed to Vercel at **https://datahunter-silk.vercel.app** (project
+  `shahman21s-projects/datahunter`). Verified in production: health 200 with the token, 401
+  without, 0 redirects, and a `respond` task answered correctly in 2.1 seconds. All eleven
+  environment variables are set for production, preview and development. Redeploy with
+  `npx vercel deploy --prod --yes --token <token>`.
+- The cloudflared tunnel was the first public URL and is now the fallback, not the primary
 
 Next.js and Node are the only two frameworks whose payment templates the platform has
 verified. Python and Expo are provisional. Do not switch frameworks today.
@@ -161,27 +166,28 @@ difficulty. Stay inside your own paths. If you need something to change in someo
 else's path, ask them in person, do not edit it.
 
 ```
-src/
-  app/
-    agent-studio/
-      v1/             Aditya owns health, tasks and the respond and use_tools solvers.
-                      Luca owns the run_workflow payment branch inside it. Nobody else
-                      touches this directory. It is the entire scoreboard.
-  agent/              Aditya. The loop, the tool definitions, the Gemini calls.
-    tools.ts          Tool schemas and handlers.
-    loop.ts           Plan, call tools, re-plan when blocked, stop.
-  app/
-    api/
-      agent/          Aditya. POST, streams AgentEvent objects back.
-      datasets/       Luca. The catalog, the free sample, the 402 gated download.
-    (ui)/             Zachary. Every page and screen.
-  components/         Zachary. Every component, plus globals.css.
-  payments/           Luca. x402 wiring, wallets, facilitator, settlement.
-  lib/
-    provenance/       Luca. Seller signing and signature verification.
-    budget.ts         Luca. Spending controls.
-  data/
-    catalog.ts        Aditya seeds it first so Zachary is never blocked.
+There is no src/ directory. The starter is flat: app/, lib/, components/, scripts/.
+
+app/
+  agent-studio/v1/      Aditya owns health, tasks and the respond and use_tools solvers.
+                        Luca owns the run_workflow payment branch in lib/race/handlers.ts.
+                        This is the entire scoreboard. Nobody else touches it.
+  api/agent/            Aditya. POST, streams AgentEvent objects back.
+  api/datasets/         Luca. The catalog route, the free sample, the 402 gated download.
+  api/{premium,buy}/    Starter's x402 example. Luca may change it, nobody else.
+  market/, console/     Zachary. The two screens that are the demo.
+components/             Zachary. Every component, plus app/globals.css.
+lib/
+  data/types.ts         Aditya. The frozen contracts. Import types from here, never redeclare.
+  data/catalog.ts       Aditya. Seeded listings, so Zachary is never blocked.
+  agent/tools.ts        Aditya. Tool schemas and handlers for the product agent.
+  agent/loop.ts         Aditya. Plan, call tools, re-plan when blocked, stop.
+  ai/claude.ts          Aditya. The only file that names a model.
+  race/                 Aditya, except the run_workflow branch. See above.
+  payments/             Luca. x402 wiring, wallets, facilitator, settlement.
+  provenance/           Luca. Seller signing and signature verification.
+  spending/             Luca. The four limits, enforced server side.
+scripts/                Shared. keygen, wallets, pay, test-race.
 ```
 
 Commits: `feat(agent): ...`, `feat(ui): ...`, `feat(pay): ...`. Small and often. Push to
