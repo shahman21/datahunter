@@ -31,7 +31,7 @@ export default function Console({ preview = false }: { preview?: boolean }) {
   const [runs, setRuns] = useState<SearchRun[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [mode, setMode] = useState<SearchRun['mode']>('preview');
+  const [mode, setMode] = useState<SearchRun['mode']>('live');
   const connections = useRef(new Map<string, AbortController>());
   const submitted = useRef(false);
   const [goal, setGoal] = useState('');
@@ -129,9 +129,6 @@ export default function Console({ preview = false }: { preview?: boolean }) {
   async function startSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ready || submitted.current) return;
-    if (mode === 'live' && !TRUST_ENFORCEMENT_READY) {
-      setFormError('Live hunts are paused until server-side trust checks are integrated. Use Preview to explore the workflow.'); return;
-    }
     const amount = Number(budget);
     if (!goal.trim() || !Number.isFinite(amount) || amount <= 0) {
       setFormError('Add a brief and a budget greater than zero.'); return;
@@ -169,7 +166,7 @@ export default function Console({ preview = false }: { preview?: boolean }) {
   return (
     <div className={`search-app ${sidebarOpen ? 'search-app--expanded' : ''}`} data-preview={preview}>
       <aside className="search-sidebar" aria-label="Data hunt history">
-        <div className="sidebar-top"><button ref={sidebarToggleRef} className="icon-button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} aria-expanded={sidebarOpen} aria-controls="search-history" onClick={() => setSidebarOpen(value => !value)}><Icon name="panel" /></button>{sidebarOpen && <span className="sidebar-wordmark">datahunter</span>}</div>
+        <div className="sidebar-top"><button ref={sidebarToggleRef} className="icon-button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} aria-expanded={sidebarOpen} aria-controls="search-history" onClick={() => setSidebarOpen(value => !value)}><Icon name="panel" /></button>{sidebarOpen && <span className="sidebar-wordmark">DataHunter</span>}</div>
         <button className="sidebar-new" onClick={newSearch} aria-label="New data hunt"><Icon name="plus" />{sidebarOpen && <span>New data hunt</span>}</button>
         <div id="search-history" className="sidebar-history" hidden={!sidebarOpen}>
           <div className="sidebar-section-label">Your data hunts <span>{runs.length}</span></div>
@@ -180,14 +177,14 @@ export default function Console({ preview = false }: { preview?: boolean }) {
       </aside>
       {sidebarOpen && <button type="button" className="sidebar-backdrop" aria-label="Close sidebar" onClick={() => { setSidebarOpen(false); sidebarToggleRef.current?.focus(); }} />}
       <div className="search-main">
-        <header className="search-topbar"><button className="workspace-brand" onClick={() => selectRun(null)}>datahunter</button><div className="topbar-right"><ThemeToggle />{runningCount > 0 && <span className="running-count"><span className="status-dot status-dot--running" />{runningCount} hunting</span>}<span className="simulation-badge">{(active?.mode ?? mode) === 'preview' ? 'Preview' : 'Live · Devnet'}</span><a href="/market" className="catalogue-link">Catalogue <Icon name="external" size={14} /></a></div></header>
+        <header className="search-topbar"><button className="workspace-brand" onClick={() => selectRun(null)}>DataHunter</button><div className="topbar-right"><ThemeToggle />{runningCount > 0 && <span className="running-count"><span className="status-dot status-dot--running" />{runningCount} hunting</span>}<span className="simulation-badge">{(active?.mode ?? mode) === 'preview' ? 'Preview' : 'Live · Devnet'}</span><a href="/market" className="catalogue-link">Catalogue <Icon name="external" size={14} /></a></div></header>
         {storageError && <p className="storage-message" role="status">{storageError}</p>}
         {!active ? <div className="search-landing">
           <div className="landing-content">
 
             <div className="landing-heading"><p>DATA WORKSPACE</p><h1>Start a data hunt.</h1></div>
 
-            {!preview && <div className="hunt-mode" role="group" aria-label="Data hunt mode"><button type="button" aria-pressed={mode === 'preview'} onClick={() => setMode('preview')}>Preview</button><button type="button" aria-pressed={mode === 'live'} disabled={!TRUST_ENFORCEMENT_READY} title={TRUST_ENFORCEMENT_READY ? undefined : 'Server-side trust integration pending'} onClick={() => setMode('live')}>Live agent</button></div>}
+            {!preview && <div className="hunt-mode" role="group" aria-label="Data hunt mode"><button type="button" aria-pressed={mode === 'preview'} onClick={() => setMode('preview')}>Preview</button><button type="button" aria-pressed={mode === 'live'} onClick={() => setMode('live')}>Live agent</button></div>}
             <form className="search-composer" aria-label="New data hunt" onSubmit={startSearch}>
               <label className="composer-label" htmlFor="goal">What are you looking for?</label>
               <textarea ref={composerRef} id="goal" required value={goal} onChange={e => setGoal(e.target.value)} placeholder="Describe the data, coverage and level of detail you need…" rows={3} />
@@ -195,8 +192,8 @@ export default function Console({ preview = false }: { preview?: boolean }) {
             </form>
             {formError && <p className="form-error" role="alert">{formError}</p>}
             <p className="simulation-note">{mode === 'preview' ? 'Preview mode · No model calls or payments.' : 'Uses your configured agent and devnet wallet.'}</p>
-            <details className="preview-info"><summary>Policy &amp; live availability</summary><p>Automatic procurement is restricted to non-personal data with reviewed training rights, seller identity and approved hosting, processing and access.</p>{!TRUST_ENFORCEMENT_READY && <p>Live hunts are paused until the server-side trust policy is integrated. The existing backend endpoints do not yet enforce this new policy.</p>}</details>
-            <div className="example-prompts"><button disabled={!ready} onClick={() => openExample('complete')}>Full demo <span>↗</span></button><button disabled={!ready} onClick={() => openExample('running')}>Activity preview <span>↗</span></button><button disabled={!ready} onClick={() => openExample('failure')}>Payment failure <span>↗</span></button></div>
+            <details className="preview-info"><summary>What stops this agent overspending</summary><p>Enforced on the server on every live run, outside the model: a per-run budget from the brief, a cap on any single payment, a lower ceiling again on exclusive licences, a seller allowlist, and a provenance signature that has to hold before a purchase is permitted. Offers made during a negotiation are checked against the same limits before they are sent.</p>{!TRUST_ENFORCEMENT_READY && <p>The trust &amp; usage assessment on the catalogue is advisory and is not yet enforced. It shows what a real deployment would require beyond a signature: reviewed identity, usage rights and data classification.</p>}</details>
+            {mode === 'preview' && <div className="example-prompts"><button disabled={!ready} onClick={() => openExample('complete')}>Full demo <span>↗</span></button><button disabled={!ready} onClick={() => openExample('running')}>Activity preview <span>↗</span></button><button disabled={!ready} onClick={() => openExample('failure')}>Payment failure <span>↗</span></button></div>}
           </div>
 
         </div> : <section className="run-dashboard" aria-label="Data hunt dashboard">

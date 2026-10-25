@@ -677,3 +677,17 @@ body:has(.catalogue-workspace) { color-scheme: var(--dh-scheme); }
 .search-app .activity-event--deal .activity-event-content { border-color: var(--dh-green-border); background: var(--dh-green-bg); }
 .search-app .activity-event--deal strong { color: var(--dh-green-ink); }
 @media (max-width: 760px) { .negotiation-summaries { margin-left: 0; } }
+
+/* Advisory marker on a trust verdict: the assessment is an opinion until it is enforced. */
+.trust-advisory {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--dh-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--dh-muted);
+  white-space: nowrap;
+}

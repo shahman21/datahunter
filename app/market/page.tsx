@@ -41,7 +41,7 @@ export default function MarketPage() {
         <h1>Dataset catalogue</h1>
         <p>Compare pricing, licences and provenance before starting a data hunt.</p>
       </header>
-      <div className="catalogue-policy"><strong>Automatic procurement policy</strong><p>{PILOT_POLICY.description}</p><p>Signed listings still require evidence of identity, usage rights and data classification.</p></div>
+      <div className="catalogue-policy"><strong>Procurement policy, advisory</strong><p>{PILOT_POLICY.description}</p><p>Signed listings still require evidence of identity, usage rights and data classification. This assessment is not yet enforced at purchase: what holds the money today is the spending limits and the provenance signature, both checked server side on every run.</p></div>
       <section className="catalogue" aria-label="Available datasets">
         <div className="catalogue-heading">
           <span>{CATALOG.length} datasets · Seeded catalogue</span>
