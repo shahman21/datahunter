@@ -94,7 +94,8 @@ Only three task types matter for the points race, so ignore `extract`, `converse
 `answer_from_source` unless the organisers add those layers. That also means we need no
 Redis, which saves an hour.
 
-**`respond`** is the 200. Call Gemini, answer the question, echo the nonce.
+**`respond`** is the 200. Call Claude, answer the question, echo the nonce. Verified locally
+against a fresh question in 1.5 seconds, with the nonce echoed.
 
 **`use_tools`** is the 300. Call each `task.tools[].url` by POST with
 `Authorization: Bearer <task.challengeToken>` and the tool input as JSON. The data behind
@@ -117,7 +118,13 @@ the builder turns them on for you.
 
 - Next.js 16 App Router, React 19, TypeScript strict, Tailwind v4
 - Node 24 is installed locally, the starter needs 20.9 or newer
-- `@google/genai` 2.28.0 for the model calls
+- Claude for the model calls, through `@anthropic-ai/sdk` 1.3.0, on Aditya's own API credit.
+  `claude-opus-5-5` for anything the verifier grades, `claude-haiku-5-5` for mechanical steps
+  (reshaping to a JSON Schema, pulling fields out of an instruction). Effort stays `low`, and
+  `medium` only for tool planning, because every layer has a 20 to 60 second window and
+  `use_tools` chains several model calls into one request. `lib/ai/claude.ts` is the only
+  place the model is named, so switching is one line. Gemini is still wired to the starter's
+  own /chat demo page and needs no key for the race.
 - x402 V2 2.28.0 on Solana devnet, `@x402/express` 2.28.0 if a separate service appears
 - Payments are USDC on Solana devnet only, atomic amounts, scheme `exact`
 - Deploy to Vercel via `npx vercel` because the CLI is not installed globally

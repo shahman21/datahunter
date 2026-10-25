@@ -6,7 +6,7 @@
 // extract, answer_from_source and converse are not part of the points race, so they stay unbuilt.
 import { TaskError, type Task, type TaskOutput, type TaskRequest, type TaskType, type ToolSpec } from "./protocol";
 import { callTool, ToolCallError } from "./tools";
-import { askGemini } from "../ai/gemini";
+import { askClaude, FAST_MODEL } from "../ai/claude";
 import { loadAgentSigner } from "../payments/client";
 import { payUsdc } from "../payments/transfer";
 
@@ -115,7 +115,7 @@ async function planCalls(tools: ToolSpec[], instruction: string, history: CallRe
     .filter(Boolean)
     .join("\n\n");
 
-  const parsed = parseJsonBlock<PlannedCall[]>(await askGemini(prompt));
+  const parsed = parseJsonBlock<PlannedCall[]>(await askClaude(prompt, { effort: "medium" }));
   if (!Array.isArray(parsed)) return [];
   return parsed.filter((c): c is PlannedCall => Boolean(c) && typeof c.tool === "string").slice(0, remaining);
 }
@@ -154,7 +154,7 @@ async function runToolAgent(task: Task, instruction: string, guidance = ""): Pro
   if (history.length === 0) throw new TaskError("internal", "Could not work out which tool to call for this task.");
 
   const text = (
-    await askGemini(
+    await askClaude(
       [
         "Answer the task using only the tool results below. Do not add anything they do not contain.",
         `Task: ${instruction}`,
@@ -169,7 +169,7 @@ async function runToolAgent(task: Task, instruction: string, guidance = ""): Pro
 
 /** Shape an answer into task.schema when the verifier gave one. */
 async function shapeToSchema(instruction: string, history: CallRecord[], schema: Record<string, unknown>): Promise<unknown> {
-  const raw = await askGemini(
+  const raw = await askClaude(
     [
       "Produce JSON that matches the JSON Schema below exactly. Output JSON only, no fences, no prose.",
       `JSON Schema:\n${JSON.stringify(schema)}`,
@@ -177,6 +177,7 @@ async function shapeToSchema(instruction: string, history: CallRecord[], schema:
       `Tool results to draw the values from:\n${JSON.stringify(history).slice(0, 20_000)}`,
       "Every value must come from the tool results. Do not invent values.",
     ].join("\n\n"),
+    { model: FAST_MODEL },
   );
   const parsed = parseJsonBlock<unknown>(raw);
   if (parsed === null) throw new TaskError("internal", "Could not produce output.data matching task.schema.");
@@ -222,12 +223,13 @@ async function extractPayment(task: Task, instruction: string): Promise<PaymentR
 
   if (!to || amountUsdc === undefined) {
     const parsed = parseJsonBlock<{ to?: string; amountUsdc?: number; memo?: string }>(
-      await askGemini(
+      await askClaude(
         [
           'Extract the payment details as JSON only: {"to": "<solana address>", "amountUsdc": <number>, "memo": "<memo or empty string>"}.',
           `Instruction: ${instruction}`,
           "Copy the address and the memo character for character. No prose, no fences.",
         ].join("\n\n"),
+        { model: FAST_MODEL },
       ),
     );
     if (!to && typeof parsed?.to === "string") to = parsed.to;
@@ -254,7 +256,7 @@ export const handlers: Record<TaskType, Handler> = {
   respond: async (task) => {
     const question = requireInput(task);
     const text = (
-      await askGemini(
+      await askClaude(
         `${question}\n\nAnswer directly and concisely. Give only the answer: no preamble, no restating the question, no markdown.`,
       )
     ).trim();
