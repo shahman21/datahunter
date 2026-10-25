@@ -267,3 +267,12 @@ textarea::placeholder { color: #788079; }
 
 .feed-row--done { border-left-color: var(--ink); background: #f6f8f6; }
 .feed-row--done .feed-body { font-size: 18px; font-weight: 550; }
+
+/* ---------- Catalogue row detail ---------- */
+.dataset-main { min-width: 0; }
+.dataset-terms { margin: 8px 0 0 !important; max-width: 56ch; }
+.dataset-flags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.flag { padding: 4px 9px; border: 1px solid var(--hairline); border-radius: 999px; background: #fff; color: var(--muted); font-size: 11px; font-weight: 550; white-space: nowrap; }
+.flag--ok { border-color: #b5d9c2; background: #f1f7f3; color: #2c5c3e; }
+.flag--pending { border-color: #ebd3a0; background: #fff9ec; color: #7d5307; }
+.flag--fault { border-color: #e8b4ab; background: #fdeeeb; color: #93291a; }
