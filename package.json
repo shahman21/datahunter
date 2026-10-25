@@ -17,7 +17,8 @@
     "wallets": "tsx scripts/wallets.ts",
     "test:transfer": "tsx --test scripts/test-transfer.ts",
     "test:spending": "tsx --test scripts/test-spending.ts scripts/test-spending-x402.ts",
-    "pay": "tsx --conditions=react-server scripts/pay.ts"
+    "pay": "tsx --conditions=react-server scripts/pay.ts",
+    "agent:try": "node scripts/try-agent.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
