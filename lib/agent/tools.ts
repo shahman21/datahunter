@@ -2,6 +2,7 @@ import "server-only";
 import { CATALOG, findDataset, priceFor } from "../data/catalog";
 import type { DatasetListing, LicenceKind, ToolName } from "../data/types";
 import { loadAgentSigner } from "../payments/client";
+import { signatureHolds } from "../provenance/verify";
 import { payUsdc } from "../payments/transfer";
 
 // The product agent's tools. These run in process against the seeded catalogue; only
@@ -51,13 +52,17 @@ export function newLedger(budgetUsdc: number): RunLedger {
   };
 }
 
-export type ProvenanceStatus = "verified" | "pending" | "unsigned";
+export type ProvenanceStatus = "verified" | "pending" | "tampered" | "unsigned";
 
 /**
- * Honest about what we actually know. `verified` means a signature was checked.
- * `pending` means the seller is named but has not issued one yet, which is where every
- * legitimate listing sits until Luca's signing service is live. `unsigned` means the
- * listing claims no seller identity at all, and nothing should ever be bought on it.
+ * Honest about what we actually know. `verified` means an ed25519 signature by the seller's
+ * own wallet was checked against this listing and held. `pending` means the seller is named
+ * but has issued no signature yet. `tampered` means a signature exists and does not match
+ * the listing being offered, so something changed after the seller signed it. `unsigned`
+ * means the listing claims no seller identity at all.
+ *
+ * Only `verified` is safe to buy, and that judgement lives here rather than in the prompt so
+ * the model cannot talk its way past it.
  */
 export function provenanceOf(dataset: DatasetListing): { status: ProvenanceStatus; detail: string } {
   if (!dataset.provenance.signedBy) {
@@ -66,7 +71,13 @@ export function provenanceOf(dataset: DatasetListing): { status: ProvenanceStatu
   if (!dataset.provenance.signature) {
     return { status: "pending", detail: `Seller ${dataset.provenance.signedBy} is named but has issued no signature yet.` };
   }
-  return { status: "verified", detail: `Signature from ${dataset.provenance.signedBy} checks out.` };
+  if (!signatureHolds(dataset)) {
+    return {
+      status: "tampered",
+      detail: `${dataset.provenance.signedBy} signed this listing, but the signature does not match what is being offered. The listing was changed after it was signed.`,
+    };
+  }
+  return { status: "verified", detail: `Signature from ${dataset.provenance.signedBy} checks out against the listing.` };
 }
 
 export interface BudgetVerdict {
@@ -99,7 +110,7 @@ export function checkBudget(ledger: RunLedger, datasetId: string, licenceKind: L
     return { allowed: false, priceUsdc, reason: `${dataset.seller.name} is not on the seller allowlist for this run.` };
   }
   const provenance = provenanceOf(dataset);
-  if (provenance.status === "unsigned") {
+  if (provenance.status !== "verified") {
     return { allowed: false, priceUsdc, reason: `Provenance check failed. ${provenance.detail}` };
   }
   return { allowed: true, priceUsdc, reason: `Within all four limits. ${provenance.detail}` };

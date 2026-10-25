@@ -1,3 +1,4 @@
+import { provenanceOf } from "@/lib/agent/tools";
 import { CATALOG } from "@/lib/data/catalog";
 import type { DatasetListing } from "@/lib/data/types";
 
@@ -5,10 +6,19 @@ import type { DatasetListing } from "@/lib/data/types";
 // fresh the rows are, and whether the seller's provenance holds. All four are on the row, and
 // an unsigned listing says so plainly rather than being quietly omitted.
 
+// The same check the agent runs, so the screen and the agent can never disagree: a listing
+// is only labelled verified if its signature actually held.
 function provenance(dataset: DatasetListing): { label: string; tone: "ok" | "pending" | "fault" } {
-  if (dataset.provenance.signature) return { label: "Provenance verified", tone: "ok" };
-  if (dataset.provenance.signedBy) return { label: "Signature pending", tone: "pending" };
-  return { label: "Unsigned", tone: "fault" };
+  switch (provenanceOf(dataset).status) {
+    case "verified":
+      return { label: "Provenance verified", tone: "ok" };
+    case "pending":
+      return { label: "Signature pending", tone: "pending" };
+    case "tampered":
+      return { label: "Signature does not match", tone: "fault" };
+    default:
+      return { label: "Unsigned", tone: "fault" };
+  }
 }
 
 const DAY = 24 * 60 * 60 * 1000;

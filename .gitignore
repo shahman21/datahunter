@@ -11,3 +11,6 @@ next-env.d.ts
 *.keypair.json
 .vercel
 .env*
+
+# Seeded seller signing keys. Public wallets and signatures are committed; these are not.
+.sellers.json

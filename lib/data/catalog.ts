@@ -1,4 +1,5 @@
 import type { DatasetListing } from "./types";
+import { LISTING_SIGNATURES, SELLER_WALLETS } from "./provenance.generated";
 
 // Seeded sellers. Supply is not the claim DataHunter makes: the claim is the settlement and
 // verification rail underneath it, and a seeded catalogue exercises that rail exactly as a
@@ -14,7 +15,7 @@ import type { DatasetListing } from "./types";
 // ds-009 is three years stale, so a brief asking for current data should reject it on the
 // free sample and never pay. Do not "fix" either: they are the demo.
 
-export const CATALOG: DatasetListing[] = [
+const SEED: DatasetListing[] = [
   {
     id: "ds-001",
     title: "UK planning applications, full text and outcomes",
@@ -163,6 +164,15 @@ export const CATALOG: DatasetListing[] = [
     provenance: { signedBy: "Marchmont Urban Sensing", signature: null },
   },
 ];
+
+// Real wallets and real signatures are generated out of band by `npm run sign:catalog`, so
+// that no seller's private key is anywhere near the app. A seller the generator has not run
+// for keeps its seeded wallet and stays unsigned, which verify_provenance reports honestly.
+export const CATALOG: DatasetListing[] = SEED.map((dataset) => ({
+  ...dataset,
+  seller: { ...dataset.seller, wallet: SELLER_WALLETS[dataset.seller.name] ?? dataset.seller.wallet },
+  provenance: { ...dataset.provenance, signature: LISTING_SIGNATURES[dataset.id] ?? null },
+}));
 
 export function findDataset(id: string): DatasetListing | undefined {
   return CATALOG.find((d) => d.id === id);
